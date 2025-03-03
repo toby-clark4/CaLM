@@ -122,7 +122,7 @@ if __name__ == '__main__':
     # data
     alphabet = Alphabet.from_architecture('CodonModel')
     datamodule = CodonDataModule(args, alphabet,
-        'training_data.fasta', args.batch_size)
+        'training_data.fasta', args.batch_size, test_size=0.01)
 
     # model
     model = CodonModel(args, alphabet)
