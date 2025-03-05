@@ -47,7 +47,8 @@ def mutate_sequence(sequence: str, mode: str = 'nucleotide') -> pd.DataFrame:
                     "sequence": mutated_sequence
                 })
     else: # codon ISM
-        for i, codon in enumerate(convert_to_codons(sequence)):
+        codon_sequence = convert_to_codons(sequence).split(' ')
+        for i, codon in enumerate(codon_sequence):
             try:
                 aa = genetic_code[codon]
             except KeyError:
@@ -67,3 +68,26 @@ def mutate_sequence(sequence: str, mode: str = 'nucleotide') -> pd.DataFrame:
     mutation_df = pd.DataFrame(mutations)
     
     return mutation_df
+
+def optimize_csc(sequence: str, csc_df: pd.DataFrame, experiment: str = 'mean_endo_csc', mode: str = 'optimize'):
+    '''
+    Optimizes or deoptimizes a codon sequence to the most/least stable by codon stabilisation coefficient
+    '''
+    if mode == 'optimize':
+        # Get highest CSC codon for each amino acid
+        opt_df = csc_df.groupby('Name').idxmax()
+    elif mode == 'deoptimize':
+        # Get the lowest CSC codon for each amino acid
+        opt_df = csc_df.groupby('Name').idxmin()
+    else:
+        print('Mode should be one of "optimize" or "deoptimize", returning the original sequence')
+        return sequence
+    
+    
+    codon_sequence = convert_to_codons(sequence).split(' ')
+    
+    aa_sequence = [csc_df['Name'].get(codon, codon) for codon in codon_sequence]
+    
+    opt_codon_sequence = [opt_df[experiment].get(aa, aa) for aa in aa_sequence]
+    
+    return ''.join(opt_codon_sequence)

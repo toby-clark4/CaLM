@@ -135,9 +135,10 @@ class CaLMTokenizer:
     def __init__(self, args: dict=ARGS) -> None:
         self.alphabet = Alphabet.from_architecture('CodonModel')
         self.bc = self.alphabet.get_batch_converter()
+        self.args = args
 
     def __call__(self, x):
-        return self.tokenize_codon_seq(x)
+        return self.tokenize(x)
     
     def trunc_seqs(self, seq):
         if len(seq) % 3 == 1:
@@ -148,7 +149,7 @@ class CaLMTokenizer:
     
     def tokenize(self, seq: str) -> torch.Tensor:
         seq = self.trunc_seqs(seq)
-        seq = seq[:self.model.args.max_positions * 3-6] if len(seq) > self.model.args.max_positions * 3 - 6 else seq
+        seq = seq[:self.args.max_positions * 3-6] if len(seq) > self.args.max_positions * 3 - 6 else seq
         codon_seq = CodonSequence(seq)
         tokenized_seq = self.tokenize_codon_seq(codon_seq)
         return tokenized_seq

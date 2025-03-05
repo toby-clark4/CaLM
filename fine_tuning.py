@@ -23,7 +23,6 @@ class PLProteinBertRegressor(pl.LightningModule):
         self.loss_fn = nn.MSELoss()  # Loss for regression
         self.lr = lr
         self.pearsonr = PearsonCorrCoef()
-        self.spearmanr = SpearmanCorrCoef()
         if checkpoint_path:
             self.model = self.load_pretrained_model(self.model, checkpoint_path)
 
@@ -64,7 +63,6 @@ class PLProteinBertRegressor(pl.LightningModule):
         rho = self.spearmanr(preds.squeeze(-1), labels)
         self.log("val_loss", loss, prog_bar=True)
         self.log("val_pearsonr", r, prog_bar=True)
-        self.log("val_spearmanr", rho, prog_bar=True)
         return loss
     
     def configure_optimizers(self):
