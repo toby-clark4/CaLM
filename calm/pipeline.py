@@ -273,4 +273,3 @@ class DataPreprocessor(PipelineEndpoint):
     def _compute_mask(self, mask_list: List[np.ndarray]) -> torch.Tensor:
         return torch.tensor(np.stack([
             mask for mask in mask_list], axis=0))
-

@@ -161,7 +161,7 @@ class Alphabet(object):
         return tokenized_text
 
     def encode(self, text):
-        return [self.tok_to_idx[tok] for tok in self.tokenize(text)]
+        return [self.tok_to_idx.get(tok, self.tok_to_idx['<unk>']) for tok in self.tokenize(text)] # Uses the unk token if the sequence contains 'N'
 
 
 class BatchConverter(object):

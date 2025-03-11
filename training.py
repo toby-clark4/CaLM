@@ -7,10 +7,10 @@ import torch
 import numpy as np
 from torch import nn
 import pytorch_lightning as pl
-from pytorch_lightning.loggers import WandbLogger
-from pytorch_lightning.callbacks import LearningRateMonitor
+from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor, EarlyStopping
+from pytorch_lightning.loggers import TensorBoardLogger
 
-from data_module import CodonDataModule
+from data_module import CodonDataModule, CodonDataModuleHF
 from checkpointing import PeriodicCheckpoint
 from calm.sequence import CodonSequence
 from calm.alphabet import Alphabet
@@ -105,9 +105,9 @@ if __name__ == '__main__':
 
     # parsing
     parser = argparse.ArgumentParser()
-    parser.add_argument('--max_positions', type=int, default=1024)
-    parser.add_argument('--batch_size', type=int, default=46)
-    parser.add_argument('--accumulate_gradients', type=int, default=40)
+    parser.add_argument('--max_positions', type=int, default=1280)
+    parser.add_argument('--batch_size', type=int, default=8)
+    parser.add_argument('--accumulate_gradients', type=int, default=8) # With 32 GPUs 8 * 8 * 32 gives an effective batch size of 2048 - c.f. 1840 for CaLM.
     parser.add_argument('--mask_proportion', type=float, default=.25)
     parser.add_argument('--leave_percent', type=float, default=.1)
     parser.add_argument('--mask_percent', type=float, default=.8)
@@ -121,21 +121,48 @@ if __name__ == '__main__':
 
     # data
     alphabet = Alphabet.from_architecture('CodonModel')
-    datamodule = CodonDataModule(args, alphabet,
-        'training_data.fasta', args.batch_size, test_size=0.01)
-
+    
+    datamodule = CodonDataModuleHF(args, alphabet, '/Users/clark04/toby/CDS-LM/processed_data/subset_100perc_orths/clean/',
+                                   args.batch_size, train_path='train_dataset_clean', val_path='eval_dataset_clean')
+    
     # model
     model = CodonModel(args, alphabet)
+    
 
+    
     # training
-    name = 'production-run'
-    logger = WandbLogger(name=name, project='12layers', version='restart3')
-    trainer = pl.Trainer(gpus=4, num_nodes=1, precision=16,
-        max_steps=args.num_steps, logger=logger, log_every_n_steps=1,
-        val_check_interval=100*args.accumulate_gradients,
-        accumulate_grad_batches=args.accumulate_gradients,
-        limit_val_batches=0.25, accelerator='dp',
-        callbacks=[PeriodicCheckpoint(1000, name),
-            LearningRateMonitor(logging_interval='step')])
-    trainer.fit(model, datamodule=datamodule,
-        ckpt_path='production-run/latest-56000.ckpt')
+    name = 'calm-orths'
+    
+    fast_dev_run = False
+    
+    best_checkpoint_callback = ModelCheckpoint(
+        dirpath="assets/",
+        filename=name,
+        save_top_k=1,               
+        monitor="val_loss",        
+        mode="min"                  
+    )
+    
+    epoch_checkpoint_callback = ModelCheckpoint(
+        dirpath="./checkpoints/CaLM_orths",
+        filename="epoch-{epoch:02d}",
+        save_top_k=-1,
+        every_n_epochs=1,
+    )
+
+    
+    early_stop_callback = EarlyStopping(
+        monitor="val_loss",
+        patience=3,
+        verbose=True,    
+        mode="min"      
+    )
+    
+    logger = TensorBoardLogger(save_dir = './lightning_logs/orths/')
+    
+    trainer = pl.Trainer(accelerator='gpu', precision="16-mixed", devices=8, num_nodes=4,
+        max_steps=args.num_steps, logger=logger, log_every_n_steps=1, gradient_clip_val=1.0,
+        accumulate_grad_batches=args.accumulate_gradients, strategy='ddp',
+        check_val_every_n_epoch=1, fast_dev_run = fast_dev_run, max_epochs=20,
+        callbacks=[best_checkpoint_callback, LearningRateMonitor(logging_interval='step'), early_stop_callback, epoch_checkpoint_callback])
+    trainer.fit(model, datamodule=datamodule)
