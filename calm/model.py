@@ -3,17 +3,14 @@
 This code has been modified from the original implementation
 by Facebook Research, describing its ESM-1b paper."""
 
-import math
-
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 from .modules import (
     TransformerLayer,
     LearnedPositionalEmbedding,
     RobertaLMHead,
-    ESM1bLayerNorm
+    ESM1bLayerNorm,
 )
 
 
@@ -24,10 +21,14 @@ class ProteinBertModel(nn.Module):
             "--num_layers", default=12, type=int, metavar="N", help="number of layers"
         )
         parser.add_argument(
-            "--embed_dim", default=768, type=int, metavar="N", help="embedding dimension"
+            "--embed_dim",
+            default=768,
+            type=int,
+            metavar="N",
+            help="embedding dimension",
         )
         parser.add_argument(
-            "--attention_dropout", default=0., type=float, help="dropout on attention"
+            "--attention_dropout", default=0.0, type=float, help="dropout on attention"
         )
         parser.add_argument(
             "--logit_bias", action="store_true", help="whether to apply bias to logits"
@@ -36,11 +37,11 @@ class ProteinBertModel(nn.Module):
             "--rope_embedding",
             default=True,
             type=bool,
-            help="whether to use Rotary Positional Embeddings"
+            help="whether to use Rotary Positional Embeddings",
         )
         parser.add_argument(
             "--ffn_embed_dim",
-            default=768*4,
+            default=768 * 4,
             type=int,
             metavar="N",
             help="embedding dimension for FFN",
@@ -104,7 +105,6 @@ class ProteinBertModel(nn.Module):
         )
 
     def forward(self, tokens, repr_layers=[], need_head_weights=False):
-
         assert tokens.ndim == 2
         padding_mask = tokens.eq(self.padding_idx)  # B, T
 
@@ -115,7 +115,9 @@ class ProteinBertModel(nn.Module):
             # x: B x T x C
             mask_ratio_train = 0.15 * 0.8
             src_lengths = (~padding_mask).sum(-1)
-            mask_ratio_observed = (tokens == self.mask_idx).sum(-1).float() / src_lengths
+            mask_ratio_observed = (tokens == self.mask_idx).sum(
+                -1
+            ).float() / src_lengths
             x = x * (1 - mask_ratio_train) / (1 - mask_ratio_observed)[:, None, None]
 
         if not self.args.rope_embedding:
@@ -142,7 +144,9 @@ class ProteinBertModel(nn.Module):
 
         for layer_idx, layer in enumerate(self.layers):
             x, attn = layer(
-                x, self_attn_padding_mask=padding_mask, need_head_weights=need_head_weights
+                x,
+                self_attn_padding_mask=padding_mask,
+                need_head_weights=need_head_weights,
             )
             if (layer_idx + 1) in repr_layers:
                 hidden_representations[layer_idx + 1] = x.transpose(0, 1)
@@ -167,7 +171,9 @@ class ProteinBertModel(nn.Module):
                 attentions = attentions[..., :-1]
             if padding_mask is not None:
                 attention_mask = 1 - padding_mask.type_as(attentions)
-                attention_mask = attention_mask.unsqueeze(1) * attention_mask.unsqueeze(2)
+                attention_mask = attention_mask.unsqueeze(1) * attention_mask.unsqueeze(
+                    2
+                )
                 attentions = attentions * attention_mask[:, None, None, :, :]
             result["attentions"] = attentions
 
@@ -177,6 +183,7 @@ class ProteinBertModel(nn.Module):
     def num_layers(self):
         return self.args.num_layers
 
+
 class ProteinBertRegressor(nn.Module):
     @classmethod
     def add_args(cls, parser):
@@ -184,10 +191,14 @@ class ProteinBertRegressor(nn.Module):
             "--num_layers", default=12, type=int, metavar="N", help="number of layers"
         )
         parser.add_argument(
-            "--embed_dim", default=768, type=int, metavar="N", help="embedding dimension"
+            "--embed_dim",
+            default=768,
+            type=int,
+            metavar="N",
+            help="embedding dimension",
         )
         parser.add_argument(
-            "--attention_dropout", default=0., type=float, help="dropout on attention"
+            "--attention_dropout", default=0.0, type=float, help="dropout on attention"
         )
         parser.add_argument(
             "--logit_bias", action="store_true", help="whether to apply bias to logits"
@@ -196,11 +207,11 @@ class ProteinBertRegressor(nn.Module):
             "--rope_embedding",
             default=True,
             type=bool,
-            help="whether to use Rotary Positional Embeddings"
+            help="whether to use Rotary Positional Embeddings",
         )
         parser.add_argument(
             "--ffn_embed_dim",
-            default=768*4,
+            default=768 * 4,
             type=int,
             metavar="N",
             help="embedding dimension for FFN",
@@ -229,7 +240,7 @@ class ProteinBertRegressor(nn.Module):
         self.regressor = nn.Sequential(
             nn.Linear(self.args.embed_dim, self.args.embed_dim // 2),
             nn.GELU(),
-            nn.Linear(self.args.embed_dim // 2, 1)
+            nn.Linear(self.args.embed_dim // 2, 1),
         )
 
     def _init_submodules_common(self):
@@ -262,10 +273,8 @@ class ProteinBertRegressor(nn.Module):
             ESM1bLayerNorm(self.args.embed_dim) if self.emb_layer_norm_before else None
         )
         self.emb_layer_norm_after = ESM1bLayerNorm(self.args.embed_dim)
-        
-        
-    def forward(self, tokens, repr_layers=[], need_head_weights=False):
 
+    def forward(self, tokens, repr_layers=[], need_head_weights=False):
         assert tokens.ndim == 2
         padding_mask = tokens.eq(self.padding_idx)  # B, T
 
@@ -295,7 +304,9 @@ class ProteinBertRegressor(nn.Module):
 
         for layer_idx, layer in enumerate(self.layers):
             x, attn = layer(
-                x, self_attn_padding_mask=padding_mask, need_head_weights=need_head_weights
+                x,
+                self_attn_padding_mask=padding_mask,
+                need_head_weights=need_head_weights,
             )
             if (layer_idx + 1) in repr_layers:
                 hidden_representations[layer_idx + 1] = x.transpose(0, 1)
@@ -309,20 +320,20 @@ class ProteinBertRegressor(nn.Module):
         # last hidden representation should have layer norm applied
         if (layer_idx + 1) in repr_layers:
             hidden_representations[layer_idx + 1] = x
-        
-        cls_emb = x[:,0,:]
-        
+
+        cls_emb = x[:, 0, :]
+
         # Compute mean of non-padding embeddings instead of CLS token
-        '''
+        """
         non_padding_mask = (~padding_mask).unsqueeze(-1)  # (B, T, 1)
         sum_embeddings = (x * non_padding_mask).sum(dim=1)  # (B, E)
         mean_emb = sum_embeddings / non_padding_mask.sum(dim=1)  # (B, E)
-        '''
-        
+        """
+
         x = self.regressor(cls_emb)
 
         result = {"logits": x, "representations": hidden_representations}
-        
+
         if need_head_weights:
             # attentions: B x L x H x T x T
             attentions = torch.stack(attn_weights, 1)
@@ -331,7 +342,9 @@ class ProteinBertRegressor(nn.Module):
                 attentions = attentions[..., :-1]
             if padding_mask is not None:
                 attention_mask = 1 - padding_mask.type_as(attentions)
-                attention_mask = attention_mask.unsqueeze(1) * attention_mask.unsqueeze(2)
+                attention_mask = attention_mask.unsqueeze(1) * attention_mask.unsqueeze(
+                    2
+                )
                 attentions = attentions * attention_mask[:, None, None, :, :]
             result["attentions"] = attentions
 

@@ -3,11 +3,8 @@
 This code has been modified from the original implementation
 by Facebook Research, describing its ESM-1b paper."""
 
-import math
-
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 from .modules import (
     TransformerLayer,

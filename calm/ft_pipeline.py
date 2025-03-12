@@ -2,13 +2,11 @@
 
 import abc
 import itertools
-from copy import deepcopy
 from typing import List, Tuple
 from collections import namedtuple
 
 import torch
 import numpy as np
-from Bio.Data.CodonTable import standard_dna_table
 
 from .sequence import Sequence
 from .alphabet import Alphabet
@@ -20,15 +18,15 @@ def _split_array(array: np.ndarray, chunks: List[int]):
     acc = 0
     arrays = []
     for chunk in chunks:
-        arrays.append(array[acc:acc+chunk])
+        arrays.append(array[acc : acc + chunk])
         acc += chunk
     return arrays
 
 
-PipelineInput = namedtuple('PipelineInput', ['sequence', 'labels'])
-PipelineOutput = namedtuple('PipelineOutput', ['input', 'labels'])
-_PipelineData = namedtuple('PipelineData',
-    ['sequence', 'labels'])
+PipelineInput = namedtuple("PipelineInput", ["sequence", "labels"])
+PipelineOutput = namedtuple("PipelineOutput", ["input", "labels"])
+_PipelineData = namedtuple("PipelineData", ["sequence", "labels"])
+
 
 class PipelineData(_PipelineData):
     """Data structure for inner pipeline data."""
@@ -88,10 +86,14 @@ class FTPipeline:
         """
 
         if not issubclass(type(pipeline[0]), PipelineEntrypoint):
-            raise ValueError('First block in a pipeline must be PipelineEntrypoint.')
+            raise ValueError("First block in a pipeline must be PipelineEntrypoint.")
         for block in pipeline[1:-1]:
-            if issubclass(type(block), PipelineEntrypoint) or issubclass(type(block), PipelineEndpoint):
-                raise ValueError('Intermediate blocks cannot be PipelineEntrypoint or PipelineEndpoint.')
+            if issubclass(type(block), PipelineEntrypoint) or issubclass(
+                type(block), PipelineEndpoint
+            ):
+                raise ValueError(
+                    "Intermediate blocks cannot be PipelineEntrypoint or PipelineEndpoint."
+                )
         self.pipeline = pipeline
 
     def __call__(self, data_: List[Tuple[Sequence, float]]) -> PipelineEndpoint:
@@ -103,7 +105,7 @@ class FTPipeline:
         Returns:
             Data after the pipeline has been applied.
         """
-        sequence, labels = zip(*data_) 
+        sequence, labels = zip(*data_)
         data = PipelineInput(sequence=sequence, labels=labels)
         for transform in self.pipeline:
             data = transform(data)
@@ -115,21 +117,23 @@ class FTDataCollator(PipelineEntrypoint):
     of a call to DataCollator are strings of tokens, separated by spaces,
     and arrays with the labels for the task."""
 
-    def __init__(self, params, alphabet):
+    def __init__(self, params, alphabet: Alphabet):
         self.params = params
         self.alphabet = alphabet
 
         if self.alphabet.use_codons:
-            self.coding_toks = [''.join(letters)
-                for letters in itertools.product(['A', 'U', 'C', 'G'], repeat=3)]
+            self.coding_toks = [
+                "".join(letters)
+                for letters in itertools.product(["A", "U", "C", "G"], repeat=3)
+            ]
         else:
-            self.coding_toks = list('ARNDCQEGHILKMFPSTWYV')
+            self.coding_toks = list("ARNDCQEGHILKMFPSTWYV")
 
     def __call__(self, input_: PipelineInput) -> PipelineData:
         output = PipelineData(sequence=[], labels=[])
-        
+
         for seq in input_.sequence:
-            output.sequence.append(' '.join(seq.tokens))
+            output.sequence.append(" ".join(seq.tokens))
         for label in input_.labels:
             output.labels.append(label)
 
@@ -140,7 +144,7 @@ class FTDataTrimmer(PipelineBlock):
     """Class to trim sequences. Returns sequences and masks that have
     been trimmed to the maximum number of positions of the model."""
 
-    def __init__(self, params, alphabet):
+    def __init__(self, params, alphabet: Alphabet):
         self.params = params
         self.alphabet = alphabet
 
@@ -158,22 +162,21 @@ class FTDataTrimmer(PipelineBlock):
         self,
         original_seq: str,
     ) -> str:
-
         original_tokens = original_seq.split()
         n_tokens = len(original_tokens)
         if n_tokens <= self.params.max_positions:
             return original_seq
         else:
-            start = 0 # np.random.randint(0, n_tokens-self.params.max_positions) if dynamically subsampling - can enable or disable this.
-            end = start+self.params.max_positions
-            new_original_seq = ' '.join(original_tokens[start:end])
+            start = 0  # np.random.randint(0, n_tokens-self.params.max_positions) if dynamically subsampling - can enable or disable this.
+            end = start + self.params.max_positions
+            new_original_seq = " ".join(original_tokens[start:end])
             return new_original_seq
 
 
 class FTDataPadder(PipelineBlock):
     """Class to pad sequences."""
 
-    def __init__(self, params, alphabet):
+    def __init__(self, params, alphabet: Alphabet):
         self.params = params
         self.alphabet = alphabet
 
@@ -183,9 +186,7 @@ class FTDataPadder(PipelineBlock):
         max_positions = max(len(seq.split()) for seq in input_.sequence)
 
         for sequence, label in input_.iterate():
-            sequence = self._pad_seq(
-                sequence,
-                max_positions = max_positions)
+            sequence = self._pad_seq(sequence, max_positions=max_positions)
             output.sequence.append(sequence)
             output.labels.append(label)
 
@@ -198,8 +199,9 @@ class FTDataPadder(PipelineBlock):
     ) -> str:
         n_tokens = len(original_seq.split())
         if len(original_seq.split()) < max_positions:
-            original_seq_ = ' '.join(original_seq.split() \
-                + ['<pad>'] * (max_positions - n_tokens))
+            original_seq_ = " ".join(
+                original_seq.split() + ["<pad>"] * (max_positions - n_tokens)
+            )
             return original_seq_
         else:
             return original_seq
@@ -208,7 +210,7 @@ class FTDataPadder(PipelineBlock):
 class FTDataPreprocessor(PipelineEndpoint):
     """Class to transform tokens into PyTorch Tensors."""
 
-    def __init__(self, params, alphabet):
+    def __init__(self, params, alphabet: Alphabet):
         self.params = params
         self.alphabet = alphabet
         self.batch_converter = alphabet.get_batch_converter()
@@ -219,10 +221,8 @@ class FTDataPreprocessor(PipelineEndpoint):
         return PipelineOutput(input=new_input, labels=labels)
 
     def _compute_input(self, seq_list: List[str]) -> torch.Tensor:
-        _, _, input_ = self.batch_converter([
-            ('', seq) for seq in seq_list])
+        _, _, input_ = self.batch_converter([("", seq) for seq in seq_list])
         return input_.to(dtype=torch.int32)
-    
+
     def _compute_labels(self, labels: List[float]) -> torch.Tensor:
         return torch.tensor(labels)
-

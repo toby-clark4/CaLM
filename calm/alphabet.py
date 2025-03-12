@@ -4,20 +4,108 @@ This code has been modified from the original implementation
 by Facebook Research, describing its ESM-1b paper."""
 
 import itertools
-import os
-from typing import Sequence, Tuple, List, Union
-import pickle
-import re
-import shutil
+from typing import Sequence, Tuple, List
 import torch
-from pathlib import Path
 
 
 proteinseq_toks = {
-    'toks': ['L', 'A', 'G', 'V', 'S', 'E', 'R', 'T', 'I', 'D', 'P', 'K', 'Q', 'N', 'F', 'Y', 'M', 'H', 'W', 'C', 'X', 'B', 'U', 'Z', 'O', '.', '-']
+    "toks": [
+        "L",
+        "A",
+        "G",
+        "V",
+        "S",
+        "E",
+        "R",
+        "T",
+        "I",
+        "D",
+        "P",
+        "K",
+        "Q",
+        "N",
+        "F",
+        "Y",
+        "M",
+        "H",
+        "W",
+        "C",
+        "X",
+        "B",
+        "U",
+        "Z",
+        "O",
+        ".",
+        "-",
+    ]
 }
 codonseq_toks = {
-    'toks': ['AAA', 'AAU', 'AAC', 'AAG', 'AUA', 'AUU', 'AUC', 'AUG', 'ACA', 'ACU', 'ACC', 'ACG', 'AGA', 'AGU', 'AGC', 'AGG', 'UAA', 'UAU', 'UAC', 'UAG', 'UUA', 'UUU', 'UUC', 'UUG', 'UCA', 'UCU', 'UCC', 'UCG', 'UGA', 'UGU', 'UGC', 'UGG', 'CAA', 'CAU', 'CAC', 'CAG', 'CUA', 'CUU', 'CUC', 'CUG', 'CCA', 'CCU', 'CCC', 'CCG', 'CGA', 'CGU', 'CGC', 'CGG', 'GAA', 'GAU', 'GAC', 'GAG', 'GUA', 'GUU', 'GUC', 'GUG', 'GCA', 'GCU', 'GCC', 'GCG', 'GGA', 'GGU', 'GGC', 'GGG']
+    "toks": [
+        "AAA",
+        "AAU",
+        "AAC",
+        "AAG",
+        "AUA",
+        "AUU",
+        "AUC",
+        "AUG",
+        "ACA",
+        "ACU",
+        "ACC",
+        "ACG",
+        "AGA",
+        "AGU",
+        "AGC",
+        "AGG",
+        "UAA",
+        "UAU",
+        "UAC",
+        "UAG",
+        "UUA",
+        "UUU",
+        "UUC",
+        "UUG",
+        "UCA",
+        "UCU",
+        "UCC",
+        "UCG",
+        "UGA",
+        "UGU",
+        "UGC",
+        "UGG",
+        "CAA",
+        "CAU",
+        "CAC",
+        "CAG",
+        "CUA",
+        "CUU",
+        "CUC",
+        "CUG",
+        "CCA",
+        "CCU",
+        "CCC",
+        "CCG",
+        "CGA",
+        "CGU",
+        "CGC",
+        "CGG",
+        "GAA",
+        "GAU",
+        "GAC",
+        "GAG",
+        "GUA",
+        "GUU",
+        "GUC",
+        "GUG",
+        "GCA",
+        "GCU",
+        "GCC",
+        "GCG",
+        "GGA",
+        "GGU",
+        "GGC",
+        "GGG",
+    ]
 }
 
 
@@ -49,7 +137,7 @@ class Alphabet(object):
         self.cls_idx = self.get_idx("<cls>")
         self.mask_idx = self.get_idx("<mask>")
         self.eos_idx = self.get_idx("<eos>")
-        self.all_special_tokens = ['<eos>', '<unk>', '<pad>', '<cls>', '<mask>']
+        self.all_special_tokens = ["<eos>", "<unk>", "<pad>", "<cls>", "<mask>"]
         self.unique_no_split_tokens = self.all_toks
 
     def __len__(self):
@@ -85,7 +173,14 @@ class Alphabet(object):
             use_codons = True
         else:
             raise ValueError("Unknown architecture selected")
-        return cls(standard_toks, prepend_toks, append_toks, prepend_bos, append_eos, use_codons)
+        return cls(
+            standard_toks,
+            prepend_toks,
+            append_toks,
+            prepend_bos,
+            append_eos,
+            use_codons,
+        )
 
     def _tokenize(self, text) -> str:
         return text.split()
@@ -161,7 +256,10 @@ class Alphabet(object):
         return tokenized_text
 
     def encode(self, text):
-        return [self.tok_to_idx.get(tok, self.tok_to_idx['<unk>']) for tok in self.tokenize(text)] # Uses the unk token if the sequence contains 'N'
+        return [
+            self.tok_to_idx.get(tok, self.tok_to_idx["<unk>"])
+            for tok in self.tokenize(text)
+        ]  # Uses the unk token if the sequence contains 'N'
 
 
 class BatchConverter(object):
@@ -181,7 +279,9 @@ class BatchConverter(object):
         tokens = torch.empty(
             (
                 batch_size,
-                max_len + int(self.alphabet.prepend_bos) + int(self.alphabet.append_eos),
+                max_len
+                + int(self.alphabet.prepend_bos)
+                + int(self.alphabet.append_eos),
             ),
             dtype=torch.int64,
         )
@@ -203,6 +303,8 @@ class BatchConverter(object):
                 + int(self.alphabet.prepend_bos),
             ] = seq
             if self.alphabet.append_eos:
-                tokens[i, len(seq_encoded) + int(self.alphabet.prepend_bos)] = self.alphabet.eos_idx
+                tokens[i, len(seq_encoded) + int(self.alphabet.prepend_bos)] = (
+                    self.alphabet.eos_idx
+                )
 
         return labels, strs, tokens

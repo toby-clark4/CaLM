@@ -64,7 +64,7 @@ class CodonDataModule(pl.LightningDataModule):
 
     def setup(self, stage: Optional[str] = None):
         if not self.fine_tune:
-            dataset = SequenceDataset(self.data_path, codon_sequence=True)
+            dataset = SequenceDataset(self.data_path)
         else:
             if self.target_column:
                 dataset = SequenceClassificationDataset(self.data_path, target_column=self.target_column, sequence_column=self.sequence_column)

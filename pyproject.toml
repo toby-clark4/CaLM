@@ -14,15 +14,22 @@ maintainers = [
 ]
 dependencies = [
     "numpy",
+    "pandas",
     "requests",
     "torch>=1.6",
     "biopython",
     "einops",
     "rotary_embedding_torch",
+    "datasets"
 ]
 
 [tool.setuptools.packages.find]
 include = ["calm", "calm.*"]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.9.10",
+]
 
 [tool.setuptools]
 include-package-data = true

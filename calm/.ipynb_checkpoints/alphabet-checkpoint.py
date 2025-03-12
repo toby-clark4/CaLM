@@ -4,13 +4,8 @@ This code has been modified from the original implementation
 by Facebook Research, describing its ESM-1b paper."""
 
 import itertools
-import os
-from typing import Sequence, Tuple, List, Union
-import pickle
-import re
-import shutil
+from typing import Sequence, Tuple, List
 import torch
-from pathlib import Path
 
 
 proteinseq_toks = {
@@ -161,7 +156,7 @@ class Alphabet(object):
         return tokenized_text
 
     def encode(self, text):
-        return [self.tok_to_idx[tok] for tok in self.tokenize(text)]
+        return [self.tok_to_idx.get(tok, self.tok_to_idx['<unk>']) for tok in self.tokenize(text)] # Uses the unk token if the sequence contains 'N'
 
 
 class BatchConverter(object):

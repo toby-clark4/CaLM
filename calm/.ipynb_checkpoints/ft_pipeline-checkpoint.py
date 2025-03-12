@@ -2,13 +2,11 @@
 
 import abc
 import itertools
-from copy import deepcopy
 from typing import List, Tuple
 from collections import namedtuple
 
 import torch
 import numpy as np
-from Bio.Data.CodonTable import standard_dna_table
 
 from .sequence import Sequence
 from .alphabet import Alphabet
@@ -115,7 +113,7 @@ class FTDataCollator(PipelineEntrypoint):
     of a call to DataCollator are strings of tokens, separated by spaces,
     and arrays with the labels for the task."""
 
-    def __init__(self, params, alphabet):
+    def __init__(self, params, alphabet: Alphabet):
         self.params = params
         self.alphabet = alphabet
 
@@ -140,7 +138,7 @@ class FTDataTrimmer(PipelineBlock):
     """Class to trim sequences. Returns sequences and masks that have
     been trimmed to the maximum number of positions of the model."""
 
-    def __init__(self, params, alphabet):
+    def __init__(self, params, alphabet: Alphabet):
         self.params = params
         self.alphabet = alphabet
 
@@ -173,7 +171,7 @@ class FTDataTrimmer(PipelineBlock):
 class FTDataPadder(PipelineBlock):
     """Class to pad sequences."""
 
-    def __init__(self, params, alphabet):
+    def __init__(self, params, alphabet: Alphabet):
         self.params = params
         self.alphabet = alphabet
 
@@ -208,7 +206,7 @@ class FTDataPadder(PipelineBlock):
 class FTDataPreprocessor(PipelineEndpoint):
     """Class to transform tokens into PyTorch Tensors."""
 
-    def __init__(self, params, alphabet):
+    def __init__(self, params, alphabet: Alphabet):
         self.params = params
         self.alphabet = alphabet
         self.batch_converter = alphabet.get_batch_converter()

@@ -14,7 +14,7 @@ from .sequence import Sequence
 from .alphabet import Alphabet
 
 
-def _split_array(array: np.ndarray, chunks: List[int]):
+def _split_array(array: np.ndarray, chunks: List[int]) -> List[np.array]:
     """Split an array into N chunks of defined size."""
     assert np.sum(chunks) == len(array)
     acc = 0
@@ -117,7 +117,7 @@ class DataCollator(PipelineEntrypoint):
     of a call to DataCollator are strings of tokens, separated by spaces,
     and arrays which are zero except where a token change has occurred."""
 
-    def __init__(self, params, alphabet):
+    def __init__(self, params, alphabet: Alphabet):
         self.params = params
         self.alphabet = alphabet
 
@@ -139,7 +139,7 @@ class DataCollator(PipelineEntrypoint):
 
         return output
 
-    def _mask_seq(self, tokens_: List[str]):
+    def _mask_seq(self, tokens_: List[str]) -> Tuple[List, List]:
         tokens = deepcopy(tokens_)
         num_tokens = len(tokens)
         num_changed_tokens = int(num_tokens * self.params.mask_proportion)
@@ -169,7 +169,7 @@ class DataTrimmer(PipelineBlock):
     """Class to trim sequences. Returns sequences and masks that have
     been trimmed to the maximum number of positions of the model."""
 
-    def __init__(self, params, alphabet):
+    def __init__(self, params, alphabet: Alphabet):
         self.params = params
         self.alphabet = alphabet
 
@@ -210,7 +210,7 @@ class DataTrimmer(PipelineBlock):
 class DataPadder(PipelineBlock):
     """Class to pad sequences."""
 
-    def __init__(self, params, alphabet):
+    def __init__(self, params, alphabet: Alphabet):
         self.params = params
         self.alphabet = alphabet
 
@@ -273,4 +273,3 @@ class DataPreprocessor(PipelineEndpoint):
     def _compute_mask(self, mask_list: List[np.ndarray]) -> torch.Tensor:
         return torch.tensor(np.stack([
             mask for mask in mask_list], axis=0))
-
