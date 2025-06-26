@@ -17,7 +17,7 @@ class ArgDict:
 
 
 _ARGS = {
-    "max_positions": 1024,
+    "max_positions": 1280,
     "batch_size": 46,
     "accumulate_gradients": 40,
     "mask_proportion": 0.25,
@@ -68,38 +68,18 @@ class CaLM:
 
         with open(weights_file, "rb") as handle:
             state_dict = pickle.load(handle)
-            self.model.load_state_dict(state_dict)
+            try:
+                self.model.load_state_dict(state_dict)
+            except:
+                state_dict = {
+                    k.replace("model.", ""): v for k, v in state_dict.items()
+                }
+                self.model.load_state_dict(state_dict)
 
         self.model.to(self.device)
 
     def __call__(self, x):
         return self.model(x)
-
-    '''
-    def embed_sequence(self, sequence: Union[str, CodonSequence], average: bool = True) -> torch.Tensor:
-        """Embeds an individual sequence using CaLM. If the ``average''
-        flag is True, then the representation is averaged over all
-        possible odons, providing a vector representation of the
-        sequence."""
-        if isinstance(sequence, str):
-            seq = CodonSequence(sequence)
-        elif isinstance(sequence, CodonSequence):
-            seq = sequence
-        else:
-            raise ValueError('Input sequence must be string or CodonSequence.')
-        
-        with torch.no_grad():
-        tokens = self.tokenize(seq)
-            repr_ = self.model(tokens, repr_layers=[12])['representations'][12]
-            if average:
-                return repr_.mean(axis=1)
-            else:
-                return repr_
-
-    def embed_sequences(self, sequences: List[Union[str, CodonSequence]]) -> torch.Tensor:
-        """Embeds a set of sequences using CaLM."""
-        return torch.cat([self.embed_sequence(seq, average=True) for seq in sequences], dim=0)
-    '''
 
     def embed_sequence(
         self, sequence: Union[str, CodonSequence], average: bool = True

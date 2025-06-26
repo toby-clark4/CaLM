@@ -10,9 +10,7 @@ import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor, EarlyStopping
 from pytorch_lightning.loggers import TensorBoardLogger
 
-from data_module import CodonDataModule, CodonDataModuleHF
-from checkpointing import PeriodicCheckpoint
-from calm.sequence import CodonSequence
+from calm.data_module import CodonDataModuleHF
 from calm.alphabet import Alphabet
 from calm.model import ProteinBertModel
 
