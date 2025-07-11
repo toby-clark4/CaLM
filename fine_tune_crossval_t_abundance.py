@@ -3,6 +3,7 @@ import argparse
 import pickle
 import pandas as pd
 import numpy as np
+import os
 
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor, EarlyStopping
@@ -10,7 +11,7 @@ from pytorch_lightning.loggers import TensorBoardLogger
 import torch
 import torch.nn as nn
 from torchmetrics.regression import PearsonCorrCoef, SpearmanCorrCoef
-from sklearn.model_selection import PredefinedSplit, KFold
+from sklearn.model_selection import PredefinedSplit, KFold, train_test_split
 from peft import get_peft_config, get_peft_model, LoraConfig, TaskType, PeftModel, PeftConfig
 from scipy.stats import pearsonr, spearmanr
 from transformers import BertConfig
@@ -22,35 +23,50 @@ from calm.alphabet import Alphabet
 from calm.model import ProteinBertRegressor
 
 
-class PredefinedTrainValTestSplit:
+class TrainValTestSplit:
     """
-    Adapter to extend PredefinedSplit for train/val/test splits.
+    Adapter to extend cross-validators for train/val/test splits.
     Mimics scikit-learn's cross-validator interface.
+    If test_fold is specified, use a predefined split like PredefinedSplit in scikit-learn
     """
     
-    def __init__(self, test_fold):
+    def __init__(self, n_folds=5, test_fold=None):
         """
         Parameters:
         test_fold: array-like, fold assignments (0-9 for 10-fold CV)
         """
-        self.test_fold = np.array(test_fold)
-        self.unique_folds = np.unique(self.test_fold)
-        if len(self.unique_folds) != 10:
-            raise ValueError(f"Expected 10 folds, got {len(self.unique_folds)}")
+        if test_fold:
+            self.test_fold = np.array(test_fold)
+            self.unique_folds = np.unique(self.test_fold)
+            self.n_folds=None
+        elif n_folds:
+            self.n_folds=n_folds
+        else:
+            raise ValueError("Need to specify one of n_folds or a predefined test fold")
     
-    def split(self):
+    def split(self, data=None):
         """
         Generate train/val/test splits.
         Returns (train_idx, val_idx, test_idx) tuples.
         """
-        for test_fold_val in self.unique_folds:
-            val_fold_val = (test_fold_val + 1) % 10
-            
-            test_idx = np.where(self.test_fold == test_fold_val)[0]
-            val_idx = np.where(self.test_fold == val_fold_val)[0]
-            train_idx = np.where(~np.isin(self.test_fold, [test_fold_val, val_fold_val]))[0]
-            
-            yield train_idx, val_idx, test_idx
+        if self.n_folds:
+            if data is None:
+                raise ValueError("Need to provide data to split")
+                
+            kf = KFold(n_splits=5, shuffle=True, random_state=42)
+            for train_idx, val_test_idx in kf.split(data):
+                test_idx, val_idx = train_test_split(val_test_idx, test_size=0.5, shuffle=True, random_state=42)
+                yield train_idx, val_idx, test_idx
+        else:        
+            for test_fold_val in self.unique_folds:
+                val_fold_val = (test_fold_val + 1) % len(self.unique_folds)
+                
+                test_idx = np.where(self.test_fold == test_fold_val)[0]
+                val_idx = np.where(self.test_fold == val_fold_val)[0]
+                train_idx = np.where(~np.isin(self.test_fold, [test_fold_val, val_fold_val]))[0]
+                
+                yield train_idx, val_idx, test_idx
+                
 
 class PEFTModelWrapper(nn.Module):
     def __init__(self, base_model):
@@ -131,7 +147,7 @@ class PLProteinBertRegressor(pl.LightningModule):
         self.test_labels.append(labels.detach().cpu())
 
     def on_test_epoch_end(self):
-        preds = torch.cat(self.test_preds).to(torch.float32).numpy()
+        preds = preds = torch.cat(self.test_preds).to(torch.float32).numpy()
         labels = torch.cat(self.test_labels).to(torch.float32).numpy()
 
         pearson_corr = pearsonr(preds, labels)[0]
@@ -195,43 +211,47 @@ if __name__ == '__main__':
     '''
     parser.add_argument('--max_positions', type=int, default=1024)
     parser.add_argument('--warmup_steps', type=int, default=0)
-    parser.add_argument('--weight_decay', type=float, default=0.001)
+    parser.add_argument('--weight_decay', type=float, default=0.01)
     parser.add_argument('--lr_scheduler', type=str, default='warmup_cosine')
     parser.add_argument('--learning_rate', type=float, default=5e-5)
     parser.add_argument('--batch_size', type=int, default=8)
-    parser.add_argument('--num_steps', type=int, default=30000)
+    parser.add_argument('--num_steps', type=int, default=20000)
     parser.add_argument('--accumulate_gradients', type=int, default=1)
     parser.add_argument('--version', type=int, default=50)
 
     ProteinBertRegressor.add_args(parser)
     args = parser.parse_args()
 
-    data_path = '../CDS-LM/data/finetuning/icodon/icodon_zebrafish.csv'
-    sequence_column = 'CDS'
-    target_column = 'y'
-    task = 'icodon_zebrafish'
+    data_path = '../CDS-LM/data/finetuning/transcript_abundance'
+    task = "transcript_abundance"
+    sequence_column = "sequence"
+    target_column = "logtpm"
     name = 'CaLM'
-    data = pd.read_csv(data_path)
-
-    # Initialize model
     alphabet = Alphabet.from_architecture('CodonModel')
-    
 
-    df_list = []
-    iterator = enumerate(PredefinedTrainValTestSplit(data['split']).split())
     res_dir = f"/home/jovyan/shared/toby/cds-lm/results/finetuning/{task}/"
-    checkpoint_dir = f"/home/jovyan/shared/toby/cds-lm/assets/checkpoints/finetuning/{name}/{task}"
+    overall_df_list = []
+    for species in ['athaliana', 'dmelanogaster', 'hsapiens', 'ppastoris', 'scerevisiae']:
+        
+        file_name = f"{species}.csv"
+        data = pd.read_csv(f"{data_path}/{file_name}", index_col=0)
+        iterator = enumerate(TrainValTestSplit(n_folds=5).split(data))        
     
-    for fold, idxs in iterator:
-        print(f'Fold {fold+1}:')
+        df_list = []        
 
-        datamodule = CodonDataModule(args, alphabet, data_path, args.batch_size,
-                                     fine_tune=True, sequence_column = sequence_column,
-                                     target_column = target_column, split_idxs = idxs)
-
-        model = ProteinBertRegressor(args, alphabet)
-
-        peft_config = LoraConfig(
+        checkpoint_dir = f"/home/jovyan/shared/toby/cds-lm/assets/checkpoints/finetuning/{name}/{task}_{species}"
+        log_dir = f"./logs/finetuning/{task}/{name}"
+        os.makedirs(checkpoint_dir, exist_ok=True)
+        
+        for fold, idxs in iterator:
+    
+            datamodule = CodonDataModule(args, alphabet, f"{data_path}/{file_name}", args.batch_size,
+                                         fine_tune=True, sequence_column = sequence_column,
+                                         target_column = target_column, split_idxs = idxs)
+    
+            model = ProteinBertRegressor(args, alphabet)
+    
+            peft_config = LoraConfig(
             task_type=TaskType.TOKEN_CLS, # TOKEN_CLS
             r=8,
             lora_alpha=16,  # 2x sqrt(hidden size)
@@ -240,39 +260,43 @@ if __name__ == '__main__':
             modules_to_save=["regressor"],
             use_rslora=True,
         )
-
-        out_file = f'fold_{fold+1}.csv'
-        pl_model = PLProteinBertRegressor(model, args, out_file, peft_config, checkpoint_path='/home/jovyan/shared/toby/cds-lm/assets/saved_models/calm_weights.pkl')
-
-
-        fast_dev_run = False # set to True to run a single batch for testing.
-
-        logger = TensorBoardLogger(save_dir = './lightning_logs/crossval/', version = fold)
-        
-        checkpoint_callback = ModelCheckpoint(
-            dirpath=checkpoint_dir,
-            filename=f'fold_{fold}+1',
-            save_top_k=1,               
-            monitor="val_loss",        
-            mode="min"                  
-        )
-        
-        early_stop_callback = EarlyStopping(
-            monitor="val_loss",   # Metric to monitor
-            patience=3,           # Number of epochs with no improvement before stopping
-            verbose=True,         # Prints logs when stopping
-            mode="min"
-        )
     
-        trainer = pl.Trainer(max_epochs=15, accelerator='gpu', precision="bf16-mixed",
-                             val_check_interval=0.5, fast_dev_run = fast_dev_run, logger = logger,
-                             log_every_n_steps = 1,
-                             callbacks=[checkpoint_callback, LearningRateMonitor(logging_interval='step'), early_stop_callback])  
-        trainer.fit(pl_model, datamodule=datamodule)
-        trainer.test(pl_model, dataloaders=datamodule.test_dataloader())
-        df_list.append(pd.read_csv(out_file))
+            out_file = f'fold_{fold+1}.csv'
+            pl_model = PLProteinBertRegressor(model, args, out_file, peft_config, checkpoint_path='/home/jovyan/shared/toby/cds-lm/assets/saved_models/calm_weights.pkl')
+    
+    
+            fast_dev_run = False # set to True to run a single batch for testing.
+    
+            logger = TensorBoardLogger(save_dir = './lightning_logs/crossval/', version = fold)
+            
+            checkpoint_callback = ModelCheckpoint(
+                dirpath=checkpoint_dir,
+                filename=f'fold_{fold}+1',
+                save_top_k=1,               
+                monitor="val_loss",        
+                mode="min"                  
+            )
+            
+            early_stop_callback = EarlyStopping(
+                monitor="val_loss",   # Metric to monitor
+                patience=3,           # Number of epochs with no improvement before stopping
+                verbose=True,         # Prints logs when stopping
+                mode="min"
+            )
+        
+            trainer = pl.Trainer(max_epochs=15, accelerator='gpu', precision="bf16-mixed",
+                                 val_check_interval=0.5, fast_dev_run = fast_dev_run, logger = logger,
+                                 log_every_n_steps = 1,
+                                 callbacks=[checkpoint_callback, LearningRateMonitor(logging_interval='step'), early_stop_callback])  
+            trainer.fit(pl_model, datamodule=datamodule)
+            trainer.test(pl_model, dataloaders=datamodule.test_dataloader())
+            df_list.append(pd.read_csv(out_file))
+    
+        species_res = pd.concat(df_list)
+        species_res['Species'] = species
+        overall_df_list.append(species_res)
+        print(f'Species: {species}')
+        print(f'R: {species_res['pearsonr'].mean()}')
+        print(f'Rho: {species_res['spearmanr'].mean()}')
 
-    full_res = pd.concat(df_list)
-    print(f'R: {full_res['pearsonr'].mean()}')
-    print(f'Rho: {full_res['spearmanr'].mean()}')
-    full_res.to_csv(f'{res_dir}/{name}_test.csv')
+    pd.concat(overall_df_list).to_csv(f'{res_dir}/{name}_test.csv')

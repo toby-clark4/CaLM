@@ -76,9 +76,10 @@ class CodonDataModule(pl.LightningDataModule):
             split_idxs contains a tuple of train and split indices for a given fold.
             Use this when running cross-validation (or if a custom val split is desired).
             '''
-            train_idx, val_idx = self.split_idxs
+            train_idx, val_idx, test_idx = self.split_idxs
             self.train_data = Subset(dataset, train_idx)
             self.val_data = Subset(dataset, val_idx)
+            self.test_data = Subset(dataset, test_idx)
         else:
             # Perform standard splitting
             self.train_data, self.val_data = train_test_split(dataset,
@@ -89,7 +90,11 @@ class CodonDataModule(pl.LightningDataModule):
             batch_size=self.batch_size, collate_fn=self.pipeline)
 
     def val_dataloader(self):
-        return torch.utils.data.DataLoader(self.val_data, num_workers=1,
+        return torch.utils.data.DataLoader(self.val_data, num_workers=2,
+            batch_size=self.batch_size, collate_fn=self.pipeline)
+
+    def test_dataloader(self):
+        return torch.utils.data.DataLoader(self.test_data, num_workers=2,
             batch_size=self.batch_size, collate_fn=self.pipeline)
 
 class CodonDataModuleHF(CodonDataModule):
