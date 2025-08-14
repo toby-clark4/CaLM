@@ -7,12 +7,6 @@ import numpy as np
 from transformers import PreTrainedTokenizerFast
 from calm.pretrained import CaLM
 import torch
-from cdslm.utils import (
-    convert_to_codons,
-    load_model_and_tokenizer,
-    get_sequence_embeddings,
-    process_and_tokenize,
-)
 from torch.utils.data import DataLoader
 from sklearn.linear_model import ElasticNet
 from sklearn.model_selection import KFold, PredefinedSplit
@@ -384,6 +378,8 @@ else:
 model = CaLM(weights_file=model_path, device='cuda')
 model.model.eval()
 
+tokenizer=None
+
 run_benchmarks(
     model,
     tokenizer,
@@ -397,5 +393,5 @@ run_benchmarks(
     random_state=seed,
     elastic_alpha=elastic_alpha,
     emb_batch_size=emb_batch_size,
-    max_length=model.config.max_position_embeddings
+    max_length=1024,
 )

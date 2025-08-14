@@ -1,1 +1,2 @@
-from .pretrained import CaLM as CaLM, CaLMTokenizer as CaLMTokenizer
+from .pretrained import CaLM as CaLM
+from .pretrained import CaLMTokenizer as CaLMTokenizer

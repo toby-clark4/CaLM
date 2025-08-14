@@ -4,9 +4,9 @@ This code has been modified from the original implementation
 by Facebook Research, describing its ESM-1b paper."""
 
 import itertools
-from typing import Sequence, Tuple, List
-import torch
+from typing import List, Sequence, Tuple
 
+import torch
 
 proteinseq_toks = {
     "toks": [

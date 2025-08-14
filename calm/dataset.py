@@ -7,7 +7,7 @@ import torch
 from Bio import SeqIO
 from datasets import load_from_disk
 
-from .sequence import Sequence, CodonSequence
+from .sequence import CodonSequence, Sequence
 
 
 class SequenceDataset(torch.utils.data.Dataset):

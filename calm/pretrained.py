@@ -2,13 +2,15 @@
 
 import os
 import pickle
-import requests
-from typing import Optional, Union, List
+from typing import List, Optional, Union
 
+import requests
 import torch
+from tqdm.auto import tqdm
+
 from .alphabet import Alphabet
-from .sequence import CodonSequence
 from .model import ProteinBertModel
+from .sequence import CodonSequence
 
 
 class ArgDict:
@@ -113,7 +115,7 @@ class CaLM:
         return torch.cat(
             [
                 self.embed_sequence(seq, average=True).to(self.device)
-                for seq in sequences
+                for seq in tqdm(sequences)
             ],
             dim=0,
         )

@@ -7,10 +7,10 @@ import torch
 import torch.nn as nn
 
 from .modules import (
-    TransformerLayer,
+    ESM1bLayerNorm,
     LearnedPositionalEmbedding,
     RobertaLMHead,
-    ESM1bLayerNorm,
+    TransformerLayer,
 )
 
 

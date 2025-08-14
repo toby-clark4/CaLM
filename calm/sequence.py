@@ -1,8 +1,9 @@
 """Classes to deal with codon sequences."""
 
 import abc
+from typing import List, Union
+
 from Bio.Seq import Seq
-from typing import Union, List
 
 
 def _split_into_codons(seq: str):

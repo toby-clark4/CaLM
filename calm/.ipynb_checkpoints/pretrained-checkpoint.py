@@ -9,33 +9,36 @@ import torch
 from .alphabet import Alphabet
 from .sequence import CodonSequence
 from .model import ProteinBertModel
+from tqdm.auto import tqdm
 
 
 class ArgDict:
     def __init__(self, d):
         self.__dict__ = d
 
+
 _ARGS = {
-    'max_positions': 1024,
-    'batch_size': 46,
-    'accumulate_gradients': 40,
-    'mask_proportion': 0.25,
-    'leave_percent': 0.10,
-    'mask_percent': 0.80,
-    'warmup_steps': 1000,
-    'weight_decay': 0.1,
-    'lr_scheduler': 'warmup_cosine',
-    'learning_rate': 4e-4,
-    'num_steps': 121000,
-    'num_layers': 12,
-    'embed_dim': 768,
-    'attention_dropout': 0.,
-    'logit_bias': False,
-    'rope_embedding': True,
-    'ffn_embed_dim': 768*4,
-    'attention_heads': 12
+    "max_positions": 1280,
+    "batch_size": 46,
+    "accumulate_gradients": 40,
+    "mask_proportion": 0.25,
+    "leave_percent": 0.10,
+    "mask_percent": 0.80,
+    "warmup_steps": 1000,
+    "weight_decay": 0.1,
+    "lr_scheduler": "warmup_cosine",
+    "learning_rate": 4e-4,
+    "num_steps": 121000,
+    "num_layers": 12,
+    "embed_dim": 768,
+    "attention_dropout": 0.0,
+    "logit_bias": False,
+    "rope_embedding": True,
+    "ffn_embed_dim": 768 * 4,
+    "attention_heads": 12,
 }
 ARGS = ArgDict(_ARGS)
+
 
 class CaLM:
     """Module to use the Codon adaptation Language Model (CaLM)
@@ -43,59 +46,45 @@ class CaLM:
     embeddings provide strong signals for protein engineering",
     bioRxiv (2022), doi: 10.1101/2022.12.15.519894."""
 
-    def __init__(self, args: dict=ARGS, weights_file: Optional[str] = None, device: Optional[str] = 'cpu') -> None:
+    def __init__(
+        self,
+        args: dict = ARGS,
+        weights_file: Optional[str] = None,
+        device: Optional[str] = "cpu",
+    ) -> None:
         if weights_file is None:
-            model_folder = os.path.join(os.path.dirname(__file__), 'calm_weights')
-            weights_file = os.path.join(model_folder, 'calm_weights.ckpt')
+            model_folder = os.path.join(os.path.dirname(__file__), "calm_weights")
+            weights_file = os.path.join(model_folder, "calm_weights.ckpt")
             if not os.path.exists(weights_file):
-                print('Downloading model weights...')
+                print("Downloading model weights...")
                 os.makedirs(model_folder, exist_ok=True)
-                url = 'http://opig.stats.ox.ac.uk/data/downloads/calm_weights.pkl'
-                with open(weights_file, 'wb') as handle:
+                url = "http://opig.stats.ox.ac.uk/data/downloads/calm_weights.pkl"
+                with open(weights_file, "wb") as handle:
                     handle.write(requests.get(url).content)
 
-        self.alphabet = Alphabet.from_architecture('CodonModel')
+        self.alphabet = Alphabet.from_architecture("CodonModel")
         self.model = ProteinBertModel(args, self.alphabet)
         self.bc = self.alphabet.get_batch_converter()
         self.device = device
 
-        with open(weights_file, 'rb') as handle:
+        with open(weights_file, "rb") as handle:
             state_dict = pickle.load(handle)
-            self.model.load_state_dict(state_dict)
-        
+            try:
+                self.model.load_state_dict(state_dict)
+            except:
+                state_dict = {
+                    k.replace("model.", ""): v for k, v in state_dict.items()
+                }
+                self.model.load_state_dict(state_dict)
+
         self.model.to(self.device)
 
     def __call__(self, x):
         return self.model(x)
-    
-    '''
-    def embed_sequence(self, sequence: Union[str, CodonSequence], average: bool = True) -> torch.Tensor:
-        """Embeds an individual sequence using CaLM. If the ``average''
-        flag is True, then the representation is averaged over all
-        possible odons, providing a vector representation of the
-        sequence."""
-        if isinstance(sequence, str):
-            seq = CodonSequence(sequence)
-        elif isinstance(sequence, CodonSequence):
-            seq = sequence
-        else:
-            raise ValueError('Input sequence must be string or CodonSequence.')
-        
-        with torch.no_grad():
-        tokens = self.tokenize(seq)
-            repr_ = self.model(tokens, repr_layers=[12])['representations'][12]
-            if average:
-                return repr_.mean(axis=1)
-            else:
-                return repr_
 
-    def embed_sequences(self, sequences: List[Union[str, CodonSequence]]) -> torch.Tensor:
-        """Embeds a set of sequences using CaLM."""
-        return torch.cat([self.embed_sequence(seq, average=True) for seq in sequences], dim=0)
-    '''
-    
-    
-    def embed_sequence(self, sequence: Union[str, CodonSequence], average: bool = True) -> torch.Tensor:
+    def embed_sequence(
+        self, sequence: Union[str, CodonSequence], average: bool = True
+    ) -> torch.Tensor:
         """Embeds an individual sequence using CaLM. If the ``average``
         flag is True, then the representation is averaged over all
         possible codons, providing a vector representation of the sequence."""
@@ -105,25 +94,36 @@ class CaLM:
         elif isinstance(sequence, CodonSequence):
             seq = sequence
         else:
-            raise ValueError('Input sequence must be string or CodonSequence.')
-        
+            raise ValueError("Input sequence must be string or CodonSequence.")
+
         with torch.no_grad():
-            tokens = self.tokenize(seq).to(self.device)  # Move tokens to the correct device
-            repr_ = self.model(tokens, repr_layers=[12])['representations'][12]
+            tokens = self.tokenize(seq).to(
+                self.device
+            )  # Move tokens to the correct device
+            repr_ = self.model(tokens, repr_layers=[12])["representations"][12]
 
             if average:
                 return repr_.mean(axis=1)
             else:
                 return repr_
 
-    def embed_sequences(self, sequences: List[Union[str, CodonSequence]]) -> torch.Tensor:
+    def embed_sequences(
+        self, sequences: List[Union[str, CodonSequence]]
+    ) -> torch.Tensor:
         """Embeds a set of sequences using CaLM."""
-        return torch.cat([self.embed_sequence(seq, average=True).to(self.device) for seq in sequences], dim=0)
+        return torch.cat(
+            [
+                self.embed_sequence(seq, average=True).to(self.device)
+                for seq in tqdm(sequences)
+            ],
+            dim=0,
+        )
 
     def tokenize(self, seq: CodonSequence) -> torch.Tensor:
-        assert isinstance(seq, CodonSequence), 'seq must be CodonSequence'
-        _, _, tokens = self.bc([('', seq.seq)])
+        assert isinstance(seq, CodonSequence), "seq must be CodonSequence"
+        _, _, tokens = self.bc([("", seq.seq)])
         return tokens
+
 
 class CaLMTokenizer:
     """Module to tokenize sequences for the Codon adaptation Language Model (CaLM)
@@ -131,31 +131,33 @@ class CaLMTokenizer:
     embeddings provide strong signals for protein engineering",
     bioRxiv (2022), doi: 10.1101/2022.12.15.519894."""
 
-    def __init__(self, args: dict=ARGS) -> None:
-        self.alphabet = Alphabet.from_architecture('CodonModel')
+    def __init__(self, args: dict = ARGS) -> None:
+        self.alphabet = Alphabet.from_architecture("CodonModel")
         self.bc = self.alphabet.get_batch_converter()
         self.args = args
 
     def __call__(self, x):
         return self.tokenize(x)
-    
+
     def trunc_seqs(self, seq):
         if len(seq) % 3 == 1:
             seq = seq[:-1]
         elif len(seq) % 3 == 2:
             seq = seq[:-2]
         return seq
-    
+
     def tokenize(self, seq: str) -> torch.Tensor:
         seq = self.trunc_seqs(seq)
-        seq = seq[:self.args.max_positions * 3-6] if len(seq) > self.args.max_positions * 3 - 6 else seq
+        seq = (
+            seq[: self.args.max_positions * 3 - 6]
+            if len(seq) > self.args.max_positions * 3 - 6
+            else seq
+        )
         codon_seq = CodonSequence(seq)
         tokenized_seq = self.tokenize_codon_seq(codon_seq)
         return tokenized_seq
-        
+
     def tokenize_codon_seq(self, seq: CodonSequence) -> torch.Tensor:
-        assert isinstance(seq, CodonSequence), 'seq must be CodonSequence'
-        _, _, tokens = self.bc([('', seq.seq)])
+        assert isinstance(seq, CodonSequence), "seq must be CodonSequence"
+        _, _, tokens = self.bc([("", seq.seq)])
         return tokens
-
-

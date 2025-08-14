@@ -4,15 +4,14 @@ This code has been modified from the original implementation
 by Facebook Research, describing its ESM-1b paper."""
 
 import math
+import uuid
 from typing import Dict, Optional, Tuple
 
 import torch
 import torch.nn.functional as F
+from rotary_embedding_torch import RotaryEmbedding
 from torch import Tensor, nn
 from torch.nn import Parameter
-from rotary_embedding_torch import RotaryEmbedding
-
-import uuid
 
 
 def utils_softmax(x, dim: int, onnx_trace: bool = False):

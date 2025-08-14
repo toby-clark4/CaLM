@@ -2,14 +2,14 @@
 
 import abc
 import itertools
-from typing import List, Tuple
 from collections import namedtuple
+from typing import List, Tuple
 
-import torch
 import numpy as np
+import torch
 
-from .sequence import Sequence
 from .alphabet import Alphabet
+from .sequence import Sequence
 
 
 def _split_array(array: np.ndarray, chunks: List[int]):
